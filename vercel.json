@@ -1,0 +1,19 @@
+{
+  "version": 2,
+  "name": "lingqian-app",
+  "builds": [
+    {
+      "src": "api/**/*.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/$1"
+    }
+  ],
+  "env": {
+    "DATABASE_URL": "@database-url"
+  }
+}
