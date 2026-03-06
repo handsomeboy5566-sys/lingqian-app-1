@@ -1,15 +1,21 @@
 // Vercel Serverless Function - 统计数据 API
 import { Pool } from '@neondatabase/serverless';
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+const pool = process.env.DATABASE_URL 
+  ? new Pool({ connectionString: process.env.DATABASE_URL })
+  : null;
 
 const setCorsHeaders = (res) => {
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+};
+
+const checkDatabase = () => {
+  if (!pool) {
+    throw new Error('数据库未配置，请在 Vercel 环境变量中添加 DATABASE_URL');
+  }
 };
 
 export default async function handler(req, res) {
@@ -24,11 +30,11 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 获取总数
+    checkDatabase();
+
     const totalResult = await pool.query('SELECT COUNT(*) as total FROM qian');
     const total = parseInt(totalResult.rows[0].total);
 
-    // 获取各运势统计
     const luckResult = await pool.query(`
       SELECT luck, COUNT(*) as count 
       FROM qian 
@@ -45,20 +51,10 @@ export default async function handler(req, res) {
         END
     `);
 
-    // 计算大吉/上上签数量
-    const goodLuckResult = await pool.query(`
-      SELECT COUNT(*) as count 
-      FROM qian 
-      WHERE luck IN ('大吉', '上上')
-    `);
+    const goodLuckResult = await pool.query(`SELECT COUNT(*) as count FROM qian WHERE luck IN ('大吉', '上上')`);
     const goodLuckCount = parseInt(goodLuckResult.rows[0].count);
 
-    // 计算上吉签数量
-    const bestLuckResult = await pool.query(`
-      SELECT COUNT(*) as count 
-      FROM qian 
-      WHERE luck = '上吉'
-    `);
+    const bestLuckResult = await pool.query(`SELECT COUNT(*) as count FROM qian WHERE luck = '上吉'`);
     const bestLuckCount = parseInt(bestLuckResult.rows[0].count);
 
     return res.status(200).json({
@@ -71,6 +67,6 @@ export default async function handler(req, res) {
     });
   } catch (error) {
     console.error('Database error:', error);
-    return res.status(500).json({ error: '服务器内部错误', details: error.message });
+    return res.status(500).json({ error: error.message || '服务器内部错误' });
   }
 }

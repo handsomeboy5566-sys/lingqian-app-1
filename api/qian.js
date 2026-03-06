@@ -2,9 +2,9 @@
 import { Pool } from '@neondatabase/serverless';
 
 // 数据库连接池
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+const pool = process.env.DATABASE_URL 
+  ? new Pool({ connectionString: process.env.DATABASE_URL })
+  : null;
 
 // 设置 CORS 头
 const setCorsHeaders = (res) => {
@@ -14,11 +14,16 @@ const setCorsHeaders = (res) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 };
 
+// 检查数据库连接
+const checkDatabase = () => {
+  if (!pool) {
+    throw new Error('数据库未配置，请在 Vercel 环境变量中添加 DATABASE_URL');
+  }
+};
+
 export default async function handler(req, res) {
-  // 设置 CORS
   setCorsHeaders(res);
 
-  // 处理 OPTIONS 预检请求
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
@@ -27,20 +32,17 @@ export default async function handler(req, res) {
   const { id } = req.query;
 
   try {
+    checkDatabase();
+
     switch (method) {
       case 'GET':
         if (id) {
-          // 获取单个签文
-          const result = await pool.query(
-            'SELECT * FROM qian WHERE id = $1',
-            [id]
-          );
+          const result = await pool.query('SELECT * FROM qian WHERE id = $1', [id]);
           if (result.rows.length === 0) {
             return res.status(404).json({ error: '签文不存在' });
           }
           return res.status(200).json(result.rows[0]);
         } else {
-          // 获取所有签文（支持搜索和筛选）
           const { search, luck, page = 1, limit = 10 } = req.query;
           
           let whereClause = '';
@@ -60,19 +62,14 @@ export default async function handler(req, res) {
             paramIndex++;
           }
 
-          // 获取总数
-          const countResult = await pool.query(
-            `SELECT COUNT(*) FROM qian ${whereClause}`,
-            params
-          );
+          const countResult = await pool.query(`SELECT COUNT(*) FROM qian ${whereClause}`, params);
           const total = parseInt(countResult.rows[0].count);
 
-          // 获取分页数据
           const offset = (parseInt(page) - 1) * parseInt(limit);
           const dataParams = [...params, parseInt(limit), offset];
           
           const result = await pool.query(
-            `SELECT * FROM qian ${whereClause}ORDER BY created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+            `SELECT * FROM qian ${whereClause} ORDER BY created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
             dataParams
           );
 
@@ -85,7 +82,6 @@ export default async function handler(req, res) {
         }
 
       case 'POST':
-        // 创建新签文
         const { id: newId, luck, story, poem, summary, advice } = req.body;
         
         if (!newId || !luck || !story || !poem || !summary || !advice) {
@@ -94,9 +90,7 @@ export default async function handler(req, res) {
 
         try {
           const result = await pool.query(
-            `INSERT INTO qian (id, luck, story, poem, summary, advice) 
-             VALUES ($1, $2, $3, $4, $5, $6) 
-             RETURNING *`,
+            `INSERT INTO qian (id, luck, story, poem, summary, advice) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
             [newId, luck, story, poem, summary, advice]
           );
           return res.status(201).json(result.rows[0]);
@@ -108,7 +102,6 @@ export default async function handler(req, res) {
         }
 
       case 'PUT':
-        // 更新签文
         if (!id) {
           return res.status(400).json({ error: '缺少签号参数' });
         }
@@ -121,10 +114,7 @@ export default async function handler(req, res) {
         }
 
         const updateResult = await pool.query(
-          `UPDATE qian 
-           SET luck = $1, story = $2, poem = $3, summary = $4, advice = $5, updated_at = CURRENT_TIMESTAMP
-           WHERE id = $6 
-           RETURNING *`,
+          `UPDATE qian SET luck = $1, story = $2, poem = $3, summary = $4, advice = $5, updated_at = CURRENT_TIMESTAMP WHERE id = $6 RETURNING *`,
           [updateLuck, updateStory, updatePoem, updateSummary, updateAdvice, id]
         );
 
@@ -135,15 +125,11 @@ export default async function handler(req, res) {
         return res.status(200).json(updateResult.rows[0]);
 
       case 'DELETE':
-        // 删除签文
         if (!id) {
           return res.status(400).json({ error: '缺少签号参数' });
         }
 
-        const deleteResult = await pool.query(
-          'DELETE FROM qian WHERE id = $1 RETURNING *',
-          [id]
-        );
+        const deleteResult = await pool.query('DELETE FROM qian WHERE id = $1 RETURNING *', [id]);
 
         if (deleteResult.rows.length === 0) {
           return res.status(404).json({ error: '签文不存在' });
@@ -156,6 +142,6 @@ export default async function handler(req, res) {
     }
   } catch (error) {
     console.error('Database error:', error);
-    return res.status(500).json({ error: '服务器内部错误', details: error.message });
+    return res.status(500).json({ error: error.message || '服务器内部错误' });
   }
 }
