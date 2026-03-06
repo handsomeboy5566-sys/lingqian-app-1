@@ -3,6 +3,14 @@
   "name": "lingqian-app",
   "builds": [
     {
+      "src": "/index.html",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "/admin.html",
+      "use": "@vercel/static"
+    },
+    {
       "src": "api/**/*.js",
       "use": "@vercel/node@latest"
     }
@@ -11,6 +19,18 @@
     {
       "src": "/api/(.*)",
       "dest": "/api/$1"
+    },
+    {
+      "src": "/",
+      "dest": "/index.html"
+    },
+    {
+      "src": "/admin",
+      "dest": "/admin.html"
+    },
+    {
+      "src": "/admin.html",
+      "dest": "/admin.html"
     }
   ]
 }
